@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS users_index (
+    user_id SERIAL PRIMARY KEY,
+    email   VARCHAR(255) UNIQUE NOT NULL
+);
