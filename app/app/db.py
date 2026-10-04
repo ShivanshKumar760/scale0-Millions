@@ -144,6 +144,7 @@ from threading import Lock
 from flask import current_app
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import ThreadedConnectionPool
+import random
 
 # Global pools registry and initialization lock to ensure thread safety
 _pools = {}
@@ -229,12 +230,22 @@ def write_url(user_id=None):
     return current_app.config["DATABASE_URL"]
 
 
+# def read_url(user_id=None, fresh=False):
+#     """Determine destination for read operations, supporting replicas."""
+#     if sharded():
+#         return shard_url(user_id)
+
+#     cfg = current_app.config
+#     if fresh:
+#         return cfg["DATABASE_URL"]
+#     return cfg.get("READ_DATABASE_URL") or cfg["DATABASE_URL"]
+
 def read_url(user_id=None, fresh=False):
-    """Determine destination for read operations, supporting replicas."""
+    """Ordinary reads: a random replica. Falls back to the primary if none is configured."""
     if sharded():
         return shard_url(user_id)
-
     cfg = current_app.config
     if fresh:
         return cfg["DATABASE_URL"]
-    return cfg.get("READ_DATABASE_URL") or cfg["DATABASE_URL"]
+    urls = cfg["READ_DATABASE_URLS"]
+    return random.choice(urls) if urls else cfg["DATABASE_URL"]
