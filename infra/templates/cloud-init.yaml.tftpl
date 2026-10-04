@@ -1,0 +1,15 @@
+#cloud-config
+package_update: true
+packages:
+  - docker.io
+  - jq
+write_files:
+%{ for path, content in files }
+  - path: ${path}
+    permissions: "0700"
+    encoding: b64
+    content: ${content}
+%{ endfor }
+runcmd:
+  - systemctl enable --now docker
+  - [ bash, -c, "bash /opt/bootstrap/run.sh > /var/log/bootstrap.log 2>&1" ]
