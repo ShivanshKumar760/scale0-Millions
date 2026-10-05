@@ -86,3 +86,23 @@ variable "k8s_min_nodes" {
 variable "k8s_max_nodes" {
   default = 8
 }
+
+variable "enable_single_db" {
+  default = false # the primary + replicas from Section 4.8. Set false once you run on shards only
+}
+
+variable "shard_count" {
+  default = 2 # 0 = sharding off. Otherwise 2 or more. PERMANENT once users exist
+}
+
+variable "shard_size" {
+  default = "s-2vcpu-4gb"
+}
+
+variable "shard_index_size" {
+  default = "s-1vcpu-2gb"
+}
+
+variable "shard_standbys" {
+  default = false # true = one hot standby per shard and for the index (doubles the database droplets)
+}

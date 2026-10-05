@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # Target = the droplet load balancer by default; override with BASE_URL=http://<ip> (used in Part 2)
 LB="${BASE_URL:-http://$(terraform -chdir=infra output -raw lb_ip)}"
-EMAIL="smoke$(date +%s)@example.com"
+EMAIL="smoke4$(date +%s)@example.com"
 J='Content-Type: application/json'
 
 echo "health:";  curl -s $LB/healthz; echo

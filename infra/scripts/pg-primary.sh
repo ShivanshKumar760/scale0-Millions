@@ -33,11 +33,21 @@ docker run -d --name pg --restart unless-stopped --network host --shm-size=1g \
   -c shared_buffers="$((MEM_MB / 4))MB" -c effective_cache_size="$((MEM_MB * 3 / 4))MB"
 
 # Nightly logical backup at 02:00, keep 7 days
+# cat > /usr/local/bin/pg-backup.sh <<'EOF'
+# #!/bin/bash
+# set -euo pipefail
+# docker exec pg pg_dump -U postgres -Fc todo > /var/backups/postgres/todo-$(date +%F).dump
+# find /var/backups/postgres -name 'todo-*.dump' -mtime +7 -delete
+# EOF
+# chmod +x /usr/local/bin/pg-backup.sh
+# echo "0 2 * * * root /usr/local/bin/pg-backup.sh" > /etc/cron.d/pg-backup
+# Nightly logical backup at 02:00, keep 7 days. Works for "todo", "todo_shard0", "todo_index", ...
 cat > /usr/local/bin/pg-backup.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
-docker exec pg pg_dump -U postgres -Fc todo > /var/backups/postgres/todo-$(date +%F).dump
-find /var/backups/postgres -name 'todo-*.dump' -mtime +7 -delete
+DB=$(docker exec pg printenv POSTGRES_DB)
+docker exec pg pg_dump -U postgres -Fc "$DB" > /var/backups/postgres/$DB-$(date +%F).dump
+find /var/backups/postgres -name '*.dump' -mtime +7 -delete
 EOF
 chmod +x /usr/local/bin/pg-backup.sh
 echo "0 2 * * * root /usr/local/bin/pg-backup.sh" > /etc/cron.d/pg-backup
