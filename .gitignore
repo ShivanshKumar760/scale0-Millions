@@ -2,7 +2,7 @@ venv
 infra/.terraform/
 *.tfstate
 *.tfstate.*
-infra/terraform.tfvars
+*/infra/terraform.tfvars
 venv/
 __pycache__/
 .env
