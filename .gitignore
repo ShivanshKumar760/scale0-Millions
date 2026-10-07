@@ -6,3 +6,4 @@ infra/.terraform/
 venv/
 __pycache__/
 .env
+*.bak

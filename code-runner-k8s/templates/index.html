@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Code Runner</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #151a22; --bar: #1a2029; --line: #262d38;
+    --text: #d8dee9; --muted: #7d8898; --accent: #3fb68b; --accent-h: #4cc79b; --err: #f07178; --ok: #3fb68b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+    font: 14px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--bar); border-bottom: 1px solid var(--line); }
+  .brand { font-weight: 700; font-size: 15px; margin-right: 8px; }
+  select, .btn { height: 34px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 0 10px; font: inherit; }
+  select:focus-visible, .btn:focus-visible, .tab:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .spacer { flex: 1; }
+  .status { color: var(--muted); font-size: 13px; }
+  .status.ok { color: var(--ok); } .status.bad { color: var(--err); }
+  .run { background: var(--accent); border-color: var(--accent); color: #06231a; font-weight: 700; padding: 0 18px; cursor: pointer; }
+  .run:hover { background: var(--accent-h); }
+  .run:disabled { opacity: .6; cursor: wait; }
+  kbd { font: 11px ui-monospace, Menlo, monospace; background: rgba(0,0,0,.25); border-radius: 3px; padding: 1px 5px; margin-left: 6px; }
+
+  .main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.6fr) 6px minmax(280px, 1fr); }
+  .editor-wrap { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .file { padding: 6px 14px; background: var(--panel); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  #editor { flex: 1; min-height: 0; }
+  .gutter { background: var(--line); cursor: col-resize; }
+  .gutter:hover, .gutter.drag { background: var(--accent); }
+
+  .side { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(90px, 30%) 1fr; background: var(--panel); }
+  .box { display: flex; flex-direction: column; min-height: 0; border-bottom: 1px solid var(--line); }
+  .box:last-child { border-bottom: 0; }
+  .head { display: flex; align-items: center; gap: 4px; padding: 0 8px 0 14px; height: 34px; background: var(--bar); border-bottom: 1px solid var(--line); font-weight: 600; font-size: 13px; }
+  .tab { background: none; border: 0; color: var(--muted); padding: 0 10px; height: 100%; cursor: pointer; font: inherit; border-bottom: 2px solid transparent; }
+  .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+  .link { margin-left: auto; background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
+  .link:hover { color: var(--text); }
+  textarea, pre { flex: 1; min-height: 0; margin: 0; padding: 12px 14px; border: 0; resize: none; background: transparent; color: var(--text);
+    font: 13px/1.55 "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+  pre.err { color: var(--err); }
+  pre .hint { color: var(--muted); }
+
+  .foot { padding: 5px 14px; background: var(--bar); border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+
+  @media (max-width: 800px) {
+    .main { grid-template-columns: 1fr; grid-template-rows: 60% 6px 1fr; }
+    .gutter { cursor: row-resize; }
+    .brand, kbd { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <span class="brand">Code Runner</span>
+  <select id="lang" aria-label="Language"></select>
+  <select id="theme" aria-label="Editor theme">
+    <option value="vs-dark">Dark</option>
+    <option value="hc-black">High contrast</option>
+    <option value="vs">Light</option>
+  </select>
+  <span class="spacer"></span>
+  <span class="status" id="status">Ready</span>
+  <button class="btn run" id="run">Run<kbd>Ctrl ↵</kbd></button>
+</header>
+
+<div class="main" id="main">
+  <section class="editor-wrap">
+    <div class="file" id="fileName">main.py</div>
+    <div id="editor" aria-label="Code editor"></div>
+  </section>
+
+  <div class="gutter" id="gutter" role="separator" aria-orientation="vertical"></div>
+
+  <aside class="side">
+    <div class="box">
+      <div class="head">Input (stdin)</div>
+      <textarea id="stdin" spellcheck="false" placeholder="Text your program reads from standard input"></textarea>
+    </div>
+    <div class="box">
+      <div class="head" role="tablist">
+        <button class="tab" role="tab" id="tabOut" aria-selected="true">Output</button>
+        <button class="tab" role="tab" id="tabErr" aria-selected="false">Errors</button>
+        <button class="link" id="clear">Clear</button>
+      </div>
+      <pre id="out"><span class="hint">Run your code to see output here.</span></pre>
+    </div>
+  </aside>
+</div>
+
+<div class="foot">Limits: 5 s runtime · 100 MB memory · 1 MB output</div>
+
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<script>
+const LANGS = {
+  python:     { label: "Python 3",   monaco: "python",     file: "main.py",   sample: 'name = input().strip() or "world"\nprint(f"Hello, {name}!")\n\nfor i in range(5):\n    print(i)\n' },
+  javascript: { label: "JavaScript", monaco: "javascript", file: "main.js",   sample: 'console.log("Hello, world!");\n' },
+  cpp:        { label: "C++",        monaco: "cpp",        file: "main.cpp",  sample: '#include <iostream>\nint main() {\n    std::cout << "Hello, world!\\n";\n}\n' },
+  java:       { label: "Java",       monaco: "java",       file: "Main.java", sample: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, world!");\n    }\n}\n' }
+};
+
+const $ = id => document.getElementById(id);
+const langSel = $("lang"), themeSel = $("theme"), runBtn = $("run"), statusEl = $("status"),
+      outEl = $("out"), stdinEl = $("stdin");
+let editor, stdout = "", stderr = "", activeTab = "out";
+
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} }
+};
+
+Object.entries(LANGS).forEach(([k, v]) => langSel.add(new Option(v.label, k)));
+langSel.value = store.get("lang", "python");
+if (!LANGS[langSel.value]) langSel.value = "python";
+themeSel.value = store.get("theme", "vs-dark");
+
+require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs" } });
+require(["vs/editor/editor.main"], () => {
+  const lang = langSel.value;
+  editor = monaco.editor.create($("editor"), {
+    value: store.get("code:" + lang, LANGS[lang].sample),
+    language: LANGS[lang].monaco,
+    theme: themeSel.value,
+    automaticLayout: true,
+    fontSize: 14,
+    fontFamily: '"JetBrains Mono", "Fira Code", Menlo, Consolas, monospace',
+    fontLigatures: true,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    smoothScrolling: true,
+    cursorSmoothCaretAnimation: "on",
+    bracketPairColorization: { enabled: true },
+    padding: { top: 12 },
+    tabSize: 4,
+    renderLineHighlight: "all"
+  });
+  $("fileName").textContent = LANGS[lang].file;
+  editor.onDidChangeModelContent(() => store.set("code:" + langSel.value, editor.getValue()));
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runCode);
+});
+
+langSel.addEventListener("change", () => {
+  const l = langSel.value;
+  store.set("lang", l);
+  monaco.editor.setModelLanguage(editor.getModel(), LANGS[l].monaco);
+  editor.setValue(store.get("code:" + l, LANGS[l].sample));
+  $("fileName").textContent = LANGS[l].file;
+});
+themeSel.addEventListener("change", () => { monaco.editor.setTheme(themeSel.value); store.set("theme", themeSel.value); });
+
+function setStatus(text, cls = "") { statusEl.textContent = text; statusEl.className = "status " + cls; }
+
+function render() {
+  const showErr = activeTab === "err";
+  const text = showErr ? stderr : stdout;
+  outEl.className = showErr ? "err" : "";
+  if (text) outEl.textContent = text;
+  else outEl.innerHTML = '<span class="hint">' + (showErr ? "No errors." : "No output.") + "</span>";
+  $("tabOut").setAttribute("aria-selected", !showErr);
+  $("tabErr").setAttribute("aria-selected", showErr);
+}
+$("tabOut").onclick = () => { activeTab = "out"; render(); };
+$("tabErr").onclick = () => { activeTab = "err"; render(); };
+$("clear").onclick = () => { stdout = stderr = ""; setStatus("Ready"); render(); };
+
+async function runCode() {
+  if (!editor) return;
+  const code = editor.getValue();
+  if (!code.trim()) { setStatus("Write some code first", "bad"); return; }
+
+  runBtn.disabled = true;
+  setStatus("Running…");
+  stdout = stderr = ""; render();
+  const t0 = performance.now();
+
+  try {
+    const res = await fetch("/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, language: langSel.value, stdin: stdinEl.value })
+    });
+    const data = await res.json();
+    const ms = Math.round(performance.now() - t0);
+
+    if (!res.ok) {
+      stderr = data.error || "Execution failed.";
+      activeTab = "err"; render(); setStatus("Error", "bad");
+      return;
+    }
+    stdout = data.stdout || "";
+    stderr = data.stderr || "";
+    activeTab = stderr && !stdout ? "err" : "out";
+    render();
+    setStatus(`Exit code ${data.exit_code} · ${ms} ms`, data.exit_code === 0 ? "ok" : "bad");
+  } catch (e) {
+    stderr = e.message; activeTab = "err"; render(); setStatus("Request failed", "bad");
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+runBtn.onclick = runCode;
+
+// Draggable divider between editor and side panel
+(() => {
+  const g = $("gutter"), main = $("main");
+  g.addEventListener("pointerdown", e => {
+    g.setPointerCapture(e.pointerId); g.classList.add("drag");
+    const move = ev => {
+      const r = main.getBoundingClientRect();
+      if (matchMedia("(max-width: 800px)").matches) {
+        const p = Math.min(80, Math.max(25, ((ev.clientY - r.top) / r.height) * 100));
+        main.style.gridTemplateRows = `${p}% 6px 1fr`;
+      } else {
+        const p = Math.min(80, Math.max(30, ((ev.clientX - r.left) / r.width) * 100));
+        main.style.gridTemplateColumns = `minmax(0, ${p}fr) 6px minmax(280px, ${100 - p}fr)`;
+      }
+    };
+    const up = () => { g.classList.remove("drag"); g.removeEventListener("pointermove", move); g.removeEventListener("pointerup", up); };
+    g.addEventListener("pointermove", move); g.addEventListener("pointerup", up);
+  });
+})();
+</script>
+</body>
+</html>

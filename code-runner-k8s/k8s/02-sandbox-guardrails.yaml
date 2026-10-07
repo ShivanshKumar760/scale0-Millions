@@ -1,0 +1,38 @@
+# Hard ceiling on what ALL sandbox Pods together may consume (protects the cluster from a flood).
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sandbox-quota
+  namespace: sandbox
+spec:
+  hard:
+    pods: "20"
+    count/jobs.batch: "100"
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    limits.cpu: "10"
+    limits.memory: 3Gi
+---
+# Defaults and per-container maximums, so no Job can ask for more than intended.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: sandbox-limits
+  namespace: sandbox
+spec:
+  limits:
+    - type: Container
+      default:        { cpu: 500m, memory: 128Mi }
+      defaultRequest: { cpu: 100m, memory: 64Mi }
+      max:            { cpu: "1",  memory: 256Mi }
+---
+# Default-deny ALL traffic in and out of sandbox Pods: no internet, no VPC, no metadata service, no DNS.
+# (Needs a CNI that enforces NetworkPolicy; DOKS uses Cilium, which does. Verify with the test in 16.10.6.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: sandbox
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]

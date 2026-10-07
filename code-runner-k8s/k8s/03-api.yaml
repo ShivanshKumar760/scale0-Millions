@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: code-runner-api
+  namespace: coderunner
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: code-runner-api }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  template:
+    metadata:
+      labels: { app: code-runner-api }
+    spec:
+      serviceAccountName: code-runner-api      # the Pod's identity: lets the API call the Kubernetes API (see 01-rbac.yaml)
+      automountServiceAccountToken: true       # mounts that identity's token into this Pod
+      imagePullSecrets:
+        - name: registry-kube-lab         # created by the DOCR <-> DOKS integration
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: api
+          image: registry.digitalocean.com/kube-lab/code-runner:k8s-2.0
+          ports: [{ containerPort: 5000 }]
+          env:
+            - { name: SANDBOX_NAMESPACE, value: sandbox }
+            - { name: RUNNER_IMAGE, value: "registry.digitalocean.com/kube-lab/code-runner:k8s-2.0" }   # keep identical to `image`
+            - { name: IMAGE_PULL_SECRET, value: "registry-kube-lab" }
+            - { name: MAX_CONCURRENT_JOBS, value: "8" }
+            - { name: RUN_TIMEOUT, value: "5" }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+          readinessProbe:
+            httpGet: { path: /, port: 5000 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /, port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: code-runner-api
+  namespace: coderunner
+spec:
+  type: LoadBalancer                     # DigitalOcean creates a (billed) Load Balancer
+  selector: { app: code-runner-api }
+  ports:
+    - { port: 80, targetPort: 5000 }
+  loadBalancerSourceRanges:
+    - YOUR.IP.ADDR.ESS/32                # only you, while this is an RCE-capable API (verify it is honoured; else use the LB's firewall)
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: code-runner-api
+  namespace: coderunner
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: code-runner-api }
